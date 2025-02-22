@@ -1,0 +1,29 @@
+version: "3.8"
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    container_name: fastapi_service
+    ports:
+      - "8000:8000"
+    restart: always
+    env_file:
+      - .env
+    volumes:
+      - ./app:/app
+      - ./data:/data
+
+  bot:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.bot
+    container_name: telegram_bot
+    restart: always
+    depends_on:
+      - api
+    env_file:
+      - .env
+    volumes:
+      - ./app:/app
