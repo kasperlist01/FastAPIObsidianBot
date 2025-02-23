@@ -6,3 +6,4 @@ aiohttp~=3.11.12
 aiogram~=3.18.0
 aiosqlite~=0.21.0
 websockets
+openai

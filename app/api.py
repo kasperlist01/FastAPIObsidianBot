@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from dotenv import load_dotenv
 
+from openai_client import generate_response
 from database import fetch_unread_messages, insert_message, mark_message_as_processed
 from typing import Dict
 
@@ -28,7 +29,9 @@ active_connections: Dict[str, WebSocket] = {}
 async def add_message(telegram_user_id: str, text: str):
     """Добавляет сообщение в БД и уведомляет WebSocket-клиентов."""
     # Добавляем сообщение в БД
-    message_id = await insert_message(telegram_user_id, text)
+    model_text = await generate_response(text)
+    message_id = await insert_message(telegram_user_id, text, model_text)
+
     print(message_id)
 
     # Если у пользователя есть активное WebSocket-соединение — отправляем сообщение
@@ -37,7 +40,8 @@ async def add_message(telegram_user_id: str, text: str):
         data_to_send = {
             "message_id": message_id,
             "type": "new_message",
-            "text": text
+            "text": text,
+            'model_text': model_text,
         }
         print("Отправлено сообщение", data_to_send)
         await websocket.send_json(data_to_send)
@@ -47,13 +51,11 @@ async def add_message(telegram_user_id: str, text: str):
         if confirmation.get("type") == "confirm" and confirmation.get("message_id") == message_id:
             success = await mark_message_as_processed(message_id)
             if success:
-                print(f"Сообщение {message_id} подтверждено и отмечено как обработанное")
+                return {"status": "ok", "message": f"✅ Сообщение {message_id} подтверждено и отмечено как обработанное"}
             else:
-                print(f"Не удалось подтвердить сообщение {message_id}")
-        else:
-            print("Получено неожиданное сообщение", confirmation)
+                return {"status": "ok", "message": f"❌ Не удалось подтвердить сообщение {message_id}"}
 
-    return {"status": "ok", "message": "Message added and sent via WebSocket"}
+    return {"status": "ok", "message": "❌ Сообщение не отправлено в обсидиан, но сохранено в базе"}
 
 
 @app.websocket("/ws/{telegram_user_id}")

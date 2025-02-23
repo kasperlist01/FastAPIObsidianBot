@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-FASTAPI_URL = os.getenv("FASTAPI_URL", "http://api:8000")
+FASTAPI_URL = os.getenv("FASTAPI_URL")
 
 bot = Bot(token=TELEGRAM_BOT_TOKEN)
 dp = Dispatcher()
@@ -26,10 +26,9 @@ async def handle_message(message: Message):
 
     async with aiohttp.ClientSession() as session:
         async with session.post(f"{FASTAPI_URL}/messages", params={"telegram_user_id": telegram_user_id, "text": text}) as response:
-            if response.status == 200:
-                await message.reply("✅ Сообщение отправлено в FastAPI и WebSocket.")
-            else:
-                await message.reply("❌ Ошибка при отправке в FastAPI.")
+            response_json = await response.json()
+            message_text = response_json.get("message", "✅ Сообщение отправлено.")
+            await message.reply(message_text)
 
 async def start_bot():
     await dp.start_polling(bot)

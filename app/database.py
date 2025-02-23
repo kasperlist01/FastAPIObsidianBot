@@ -5,7 +5,8 @@ from dotenv import load_dotenv
 # Загружаем переменные из .env
 load_dotenv()
 
-DATABASE_PATH = os.getenv("DATABASE_PATH", "/data/messages.db")
+# DATABASE_PATH = os.getenv("DATABASE_PATH")
+DATABASE_PATH = "../data/messages.db"
 
 async def init_db():
     os.makedirs(os.path.dirname(DATABASE_PATH), exist_ok=True)  # Создаем папку, если нет
@@ -23,6 +24,7 @@ async def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NOT NULL,
                 text TEXT NOT NULL,
+                model_text TEXT NOT NULL,
                 processed INTEGER DEFAULT 0,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users(id)
@@ -32,12 +34,12 @@ async def init_db():
 
 
 
-async def insert_message(user_id: str, text: str):
+async def insert_message(user_id: str, text: str, model_text: str):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         # Вставляем сообщение
         cursor = await db.execute(
-            "INSERT INTO messages (user_id, text) VALUES (?, ?)",
-            (user_id, text)
+            "INSERT INTO messages (user_id, text, model_text) VALUES (?, ?, ?)",
+            (user_id, text, model_text)
         )
         await db.commit()
 
