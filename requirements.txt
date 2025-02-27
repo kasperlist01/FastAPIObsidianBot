@@ -7,3 +7,5 @@ aiogram~=3.18.0
 aiosqlite~=0.21.0
 websockets
 openai
+requests
+anthropic

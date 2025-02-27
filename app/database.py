@@ -24,6 +24,8 @@ async def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NOT NULL,
                 text TEXT NOT NULL,
+                chat_id INTEGER NOT NULL,
+                progress_message_id INTEGER NOT NULL,
                 model_text TEXT NOT NULL,
                 processed INTEGER DEFAULT 0,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -34,12 +36,12 @@ async def init_db():
 
 
 
-async def insert_message(user_id: str, text: str, model_text: str):
+async def insert_message(user_id: str, text: str, model_text: str, chat_id: int, progress_message_id: int):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         # Вставляем сообщение
         cursor = await db.execute(
-            "INSERT INTO messages (user_id, text, model_text) VALUES (?, ?, ?)",
-            (user_id, text, model_text)
+            "INSERT INTO messages (user_id, text, model_text, chat_id, progress_message_id) VALUES (?, ?, ?, ?, ?)",
+            (user_id, text, model_text, chat_id, progress_message_id)
         )
         await db.commit()
 
@@ -54,7 +56,7 @@ async def fetch_unread_messages(telegram_user_id: str):
         # Находим user_id по telegram_user_id
         # Выбираем все сообщения, где processed = 0
         async with db.execute("""
-            SELECT id, text, created_at 
+            SELECT id, text, created_at, chat_id, progress_message_id, model_text
             FROM messages 
             WHERE user_id = ? AND processed = 0
             ORDER BY id ASC
@@ -62,7 +64,7 @@ async def fetch_unread_messages(telegram_user_id: str):
             messages = await cursor.fetchall()
 
         return [
-            {"id": m[0], "text": m[1], "created_at": m[2]}
+            {"id": m[0], "text": m[1], "created_at": m[2], "chat_id": m[3], "progress_message_id": m[4], "model_text": m[5]}
             for m in messages
         ]
 
