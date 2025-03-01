@@ -9,3 +9,5 @@ websockets
 openai
 requests
 anthropic
+faster_whisper
+torch
