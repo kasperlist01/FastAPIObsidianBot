@@ -1,8 +1,9 @@
 import datetime
 import os
+
 import openai
 import asyncio
-import anthropic  # Импорт библиотеки для работы с Claude
+import anthropic
 from dotenv import load_dotenv
 from zoneinfo import ZoneInfo
 
@@ -22,7 +23,6 @@ client = openai.AsyncOpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_API_URL)
 
 # Получаем API-ключ и URL для Anthropic (Claude)
 CLAUDE_API_KEY = os.getenv("ANTHROPIC_API_KEY")
-# ВАЖНО: Убедитесь, что в ANTHROPIC_API_URL нет завершающего слеша!
 CLAUDE_API_URL = os.getenv("ANTHROPIC_API_URL")
 
 if not CLAUDE_API_KEY:
@@ -43,43 +43,65 @@ def read_prompt_from_file(filename: str) -> str:
         return f"Ошибка при чтении файла: {str(e)}"
 
 
-async def generate_response(text, model: str = "gpt-4", temperature: float = 0.7) -> str:
+def generate_week_dates() -> dict:
+    """Создает словарь с датами на неделю вперёд."""
+    now = datetime.datetime.now(ZoneInfo("Europe/Moscow"))
+    week_dates = {}
+    for i in range(7):
+        future_date = now + datetime.timedelta(days=i)
+        week_dates[future_date.strftime("%A")] = {
+            "day": future_date.strftime("%d"),
+            "month": future_date.strftime("%B"),
+            "year": future_date.strftime("%Y"),
+        }
+    return week_dates
+
+
+async def generate_gpt_response(text, model: str = "gpt-4o", temperature: float = 0.7) -> str | tuple[str, str]:
     """
     Отправляет асинхронный запрос в OpenAI API и получает ответ.
     """
     prompt = read_prompt_from_file(PROMT_PATH)
     now_moscow = datetime.datetime.now(ZoneInfo("Europe/Moscow"))
-    formatted_date = now_moscow.strftime("%d-%ое %B %Y, %H:%M по Москве")
+    formatted_date = now_moscow.strftime("%A, %d-%ое %B %Y, %H:%M по Москве")
+    week_dates = generate_week_dates()
+
     try:
         response = await client.chat.completions.create(
             model=model,
             messages=[
-                {"role": "system", "content": f"Сегодня {formatted_date}\n{prompt}"},
+                {"role": "system", "content": f"Сегодня {formatted_date}\nДаты на неделю: {week_dates}\n{prompt}"},
                 {"role": "user", "content": text}
             ],
             temperature=temperature
         )
-        return response.choices[0].message.content
+
+        result = response.choices[0].message.content
+        date, result = result.split('//')
+        marker = "📅 Дневной план"
+        date = date.replace('{{', '').replace('}}', '')
+        idx = result.find(marker)
+        if idx != -1:
+            result = result[idx:]
+        return date, result
     except openai.OpenAIError as e:
         return f"Ошибка OpenAI API: {str(e)}"
     except Exception as e:
         return f"Ошибка обработки сообщения: {str(e)}"
 
 
-async def generate_claude_response(text, model: str = "claude-3-5-sonnet-20240620", temperature: float = 0.7) -> str:
+async def generate_claude_response(text, model: str = "claude-3-5-sonnet-20240620", temperature: float = 0.7) -> tuple[
+    str, str]:
     """
     Отправляет асинхронный запрос в API Anthropic (Claude) и получает ответ.
-
-    Функция формирует запрос с использованием текущей даты, загруженного промта и запроса пользователя.
-    Запрос отправляется на endpoint /messages, как в рабочем curl-примере.
     """
     prompt = read_prompt_from_file(PROMT_PATH)
     now_moscow = datetime.datetime.now(ZoneInfo("Europe/Moscow"))
-    formatted_date = now_moscow.strftime("%d-%ое %B %Y, %H:%M по Москве")
+    formatted_date = now_moscow.strftime("%A, %d-%ое %B %Y, %H:%M по Москве")
+    week_dates = generate_week_dates()
 
-    # Формируем строку запроса в формате, ожидаемом Anthropic.
     conversation = (
-        f"Human: Сегодня {formatted_date}\n{prompt}\n\n"
+        f"Human: Сегодня {formatted_date}\nДаты на неделю: {week_dates}\n{prompt}\n\n"
         f"Human: {text}\n\n"
         "Assistant:"
     )
@@ -88,23 +110,28 @@ async def generate_claude_response(text, model: str = "claude-3-5-sonnet-2024062
         try:
             response = claude_client.messages.create(
                 model=model,
-                max_tokens=4096,  # Параметр max_tokens, как в curl-примере
+                max_tokens=4096,
                 temperature=temperature,
                 messages=[{"role": "user", "content": conversation}]
             )
-            # Доступ через атрибут, а не через индекс
             return response.content[0].text
         except Exception as e:
             return f"Ошибка Anthropic API: {str(e)}"
 
     result = await asyncio.to_thread(claude_request)
-    return result
+    date, result = result.split("//")
+    marker = "📅 Дневной план"
+    date = date.replace('{{', '').replace('}}', '')
+    idx = result.find(marker)
+    if idx != -1:
+        result = result[idx:]
+    return date, result
 
 
 async def main():
     text = "Привет, как дела?"
     print("Ответ от OpenAI:")
-    response_openai = await generate_response(text)
+    response_openai = await generate_gpt_response(text)
     print(response_openai)
     print("\nОтвет от Anthropic (Claude):")
     response_claude = await generate_claude_response(text)

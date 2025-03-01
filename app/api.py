@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import time
-
 import requests
 import os
 from typing import Dict
@@ -10,20 +9,16 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
 from dotenv import load_dotenv
-from openai_client import generate_response, generate_claude_response
 from database import fetch_unread_messages, insert_message, mark_message_as_processed
 
 load_dotenv()
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
-# === Настройка логирования ===
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
-
-# Разрешаем CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -32,24 +27,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Храним активные WebSocket-соединения и их состояние
 active_connections: Dict[str, WebSocket] = {}
-pending_acks: Dict[str, Dict] = {}  # Ожидаемые подтверждения сообщений
+pending_acks: Dict[str, Dict] = {}
 
-PING_INTERVAL = 30  # Каждые 30 секунд отправляем ping
-PING_TIMEOUT = 10   # Ожидаем pong максимум 10 секунд
-ACK_TIMEOUT = 5     # Ожидаем подтверждение сообщений 5 секунд
+PING_INTERVAL = 30
+PING_TIMEOUT = 10
+ACK_TIMEOUT = 5
 
 @app.post("/messages")
-async def add_message(telegram_user_id: str, text: str, progress_message_id: int, chat_id: int):
+async def add_message(telegram_user_id: str, text: str, model_text: str, progress_message_id: int, chat_id: int, plan_date: str):
     """Добавляет сообщение в БД и отправляет клиенту по WebSocket"""
-    model_text = await generate_claude_response(text)
-    db_message_id = await insert_message(telegram_user_id, text, model_text, chat_id, progress_message_id)
+    db_message_id = await insert_message(telegram_user_id, text, model_text, chat_id, progress_message_id, plan_date)
     print({"progress_message_id": progress_message_id, "chat_id": chat_id})
 
     logger.info(f"Новое сообщение {db_message_id} от {telegram_user_id}: {text}")
 
-    # Если пользователь в сети, отправляем сообщение
     if telegram_user_id in active_connections:
         websocket = active_connections[telegram_user_id]
         data_to_send = {
@@ -58,7 +50,8 @@ async def add_message(telegram_user_id: str, text: str, progress_message_id: int
             "text": text,
             "model_text": model_text,
             "chat_id": chat_id,
-            "progress_message_id": progress_message_id
+            "progress_message_id": progress_message_id,
+            "plan_date": plan_date
         }
         await send_with_ack(websocket, telegram_user_id, data_to_send)
 
@@ -89,6 +82,7 @@ async def websocket_endpoint(websocket: WebSocket, telegram_user_id: str):
             "chat_id": message["chat_id"],
             "progress_message_id": message["progress_message_id"],
             "model_text": message["model_text"],
+            "plan_date": message["plan_date"]
         }
         await send_with_ack(websocket, telegram_user_id, data_to_send)
 

@@ -2,10 +2,8 @@ import aiosqlite
 import os
 from dotenv import load_dotenv
 
-# Загружаем переменные из .env
 load_dotenv()
 
-# DATABASE_PATH = os.getenv("DATABASE_PATH")
 DATABASE_PATH = "../data/messages.db"
 
 async def init_db():
@@ -27,6 +25,7 @@ async def init_db():
                 chat_id INTEGER NOT NULL,
                 progress_message_id INTEGER NOT NULL,
                 model_text TEXT NOT NULL,
+                plan_date TEXT NOT NULL,
                 processed INTEGER DEFAULT 0,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users(id)
@@ -34,20 +33,14 @@ async def init_db():
         """)
         await db.commit()
 
-
-
-async def insert_message(user_id: str, text: str, model_text: str, chat_id: int, progress_message_id: int):
+async def insert_message(user_id: str, text: str, model_text: str, chat_id: int, progress_message_id: int, plan_date: str):
     async with aiosqlite.connect(DATABASE_PATH) as db:
-        # Вставляем сообщение
         cursor = await db.execute(
-            "INSERT INTO messages (user_id, text, model_text, chat_id, progress_message_id) VALUES (?, ?, ?, ?, ?)",
-            (user_id, text, model_text, chat_id, progress_message_id)
+            "INSERT INTO messages (user_id, text, model_text, chat_id, progress_message_id, plan_date) VALUES (?, ?, ?, ?, ?, ?)",
+            (user_id, text, model_text, chat_id, progress_message_id, plan_date)
         )
         await db.commit()
-
-        # Получаем ID последнего вставленного сообщения
         last_row_id = cursor.lastrowid
-
         return last_row_id
 
 
